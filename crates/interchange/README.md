@@ -93,9 +93,6 @@ OMF carries no video at all.
   random corruption never panic. Nested sequences: AAF round trips as compositions (nests in
   nests, a nest used twice, another frame and sample rate, breakout to mono), OMF with the
   rendered sound, the audio needs of nests, a sequence inside itself.
-- `src/fcpxml.rs` (unit tests): a connected clip's `lane` is a track index, so lanes beyond 999 (nested lanes
-  add up) are skipped with a warning instead of creating that many tracks; a lane of 100000 made 200 002 tracks
-  and a lane in the billions exhausted memory. The largest lane that fits is still imported.
 - `tests/uncarried_clips.rs`: every format's export report names each graphic clip and adjustment
   layer once, as a warning; a sequence without them reports nothing; what a re-import gives back
   matches the report; the FCP7 XML import names a clip item whose file is not defined.
@@ -107,3 +104,6 @@ OMF carries no video at all.
   nested compositions tagged top-level) reads back as the same edit.
 - `src/omf/tests.rs`: the Bento label and TOC, the required properties of every OMF class
   written, reference resolution, embedded WAVE data, sequence lengths in samples.
+- `src/fcpxml.rs` (unit tests): a connected clip's `lane` is a track index, so lanes beyond 999 (nested lanes
+  add up) are skipped with a warning instead of creating that many tracks; a lane of 100000 made 200 002 tracks
+  and a lane in the billions exhausted memory. The largest lane that fits is still imported.

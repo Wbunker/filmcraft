@@ -69,10 +69,11 @@ pub(crate) fn parse_time(s: &str) -> Option<Tick> {
     s.parse::<f64>().ok().map(Tick::from_seconds_f64)
 }
 
-/// Most connected-clip lanes (video above the spine, audio below it) the importer will create tracks
-/// for. A lane is a track index, so one huge `lane` attribute would otherwise allocate that many tracks;
-/// this matches the 999 tracks a sequence can have (`engine::sequence_tools::MAX_TRACKS`).
-const MAX_LANE: u32 = 999;
+/// Most tracks of one kind a sequence has (`engine::sequence_tools::MAX_TRACKS`). A lane is a track
+/// index, so one huge `lane` attribute would otherwise allocate that many tracks. Video lane N is
+/// track N (the spine is track 0) and audio lane -N is track N - 1, so the lanes the importer keeps
+/// run from -MAX_TRACKS to MAX_TRACKS - 1.
+const MAX_TRACKS: i64 = 999;
 
 /// Format ticks as an FCPXML rational time, frame-based at `rate` when the value is on a frame.
 pub(crate) fn fmt_time(t: Tick, rate: FrameRate) -> String {
@@ -469,8 +470,13 @@ impl<'a, 'i> Imp<'a, 'i, '_> {
             let ct0 = t0 + (off - local_start);
             let clane = if lane > 0 && l > 0 { lane.saturating_add(l) } else { l };
             // Every lane up to this one becomes a track, so a hostile `lane` is an allocation of that size.
-            if clane.unsigned_abs() > MAX_LANE {
-                self.report.warn(format!("<{}> on lane {clane} is beyond the {MAX_LANE} lanes a sequence can have; skipped", c.tag_name().name()));
+            if !(-MAX_TRACKS..MAX_TRACKS).contains(&i64::from(clane)) {
+                self.report.warn(format!(
+                    "<{}> on lane {clane} is beyond the lanes a sequence can have ({} to {}); skipped",
+                    c.tag_name().name(),
+                    -MAX_TRACKS,
+                    MAX_TRACKS - 1
+                ));
                 continue;
             }
             if c.has_tag_name("spine") {
@@ -1228,12 +1234,20 @@ mod tests {
             assert!(report.mentions("lanes a sequence can have"), "{inner}: {report}");
             for seq in imported.sequences.iter().filter_map(|s| imported.project.sequence(*s)) {
                 let tracks = seq.tracks(TrackKind::Video).len() + seq.tracks(TrackKind::Audio).len();
-                assert!(tracks <= 2 * MAX_LANE as usize + 2, "{inner}: {tracks} tracks");
+                assert!(tracks <= 2 * MAX_TRACKS as usize, "{inner}: {tracks} tracks");
             }
         }
-        // the largest lane that fits is still imported
-        let (imported, report) = crate::import(doc(&clip(MAX_LANE as i64)).as_bytes(), crate::Format::Fcpxml, None).expect("import succeeds");
-        assert!(!report.mentions("lanes a sequence can have"), "{report}");
-        assert!(imported.sequences.iter().filter_map(|s| imported.project.sequence(*s)).any(|q| q.tracks(TrackKind::Video).len() > MAX_LANE as usize));
+        // the largest lanes that fit are imported, and no sequence is left with more tracks than the engine allows
+        for lane in [MAX_TRACKS - 1, -MAX_TRACKS] {
+            let (imported, report) = crate::import(doc(&clip(lane)).as_bytes(), crate::Format::Fcpxml, None).expect("import succeeds");
+            assert!(!report.mentions("lanes a sequence can have"), "lane {lane}: {report}");
+            let q = imported.sequences.iter().filter_map(|s| imported.project.sequence(*s)).next().expect("a sequence");
+            assert_eq!(q.tracks(TrackKind::Video).len().max(q.tracks(TrackKind::Audio).len()), MAX_TRACKS as usize, "lane {lane}");
+        }
+        // one past either end is skipped
+        for lane in [MAX_TRACKS, -MAX_TRACKS - 1] {
+            let (_, report) = crate::import(doc(&clip(lane)).as_bytes(), crate::Format::Fcpxml, None).expect("import succeeds");
+            assert!(report.mentions("lanes a sequence can have"), "lane {lane}: {report}");
+        }
     }
 }

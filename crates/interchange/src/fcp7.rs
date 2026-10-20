@@ -74,6 +74,10 @@ fn generator_from(name: &str, id: &str, report: &mut Report) -> Generator {
     }
 }
 
+/// Most tracks of one kind a sequence has (the engine's `sequence_tools::MAX_TRACKS`); a file listing
+/// more `<track>` elements is cut there so the import is a sequence the engine could have built.
+const MAX_TRACKS: usize = 999;
+
 fn read_rate(n: Node) -> Option<FrameRate> {
     let r = child(n, "rate")?;
     let tb = child_i64(r, "timebase")?;
@@ -343,6 +347,10 @@ impl<'a, 'i> Imp<'a, 'i, '_> {
         for (kind, tag) in [(TrackKind::Video, "video"), (TrackKind::Audio, "audio")] {
             let Some(m) = media.and_then(|m| child(m, tag)) else { continue };
             for (ti, tn) in children(m, "track").enumerate() {
+                if ti >= MAX_TRACKS {
+                    self.report.warn(format!("a sequence has more than {MAX_TRACKS} {tag} tracks; the rest were skipped"));
+                    break;
+                }
                 self.b.ensure_tracks(&mut seq, kind, ti + 1);
                 self.track(&mut seq, id, kind, ti, tn, rate, (w, h));
             }

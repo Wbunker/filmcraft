@@ -87,7 +87,7 @@ OMF carries no video at all.
 
 A sequence has at most 999 tracks of a kind in the engine, so the FCP7 XML importer stops at the 999th `<track>`
 of a kind and warns about the rest, instead of building a sequence the engine would not let a user make.
-Covered by `tests/fcp7_tracks.rs`.
+An overlapping clip that finds no room before the 999th track is skipped with a warning, too. Covered by `tests/fcp7_tracks.rs`.
 
 ## Tests
 

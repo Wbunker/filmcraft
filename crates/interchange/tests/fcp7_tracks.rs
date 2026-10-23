@@ -35,3 +35,26 @@ fn the_limit_itself_is_not_reported() {
     assert_eq!(counts(LIMIT, LIMIT), (LIMIT, LIMIT, false));
     assert_eq!(counts(3, 2), (3, 2, false));
 }
+
+/// Reviewer's case: 998 empty tracks, then a 999th holding two overlapping clips. The second one used to be
+/// moved to a 1 000th track by `Builder::place`; now it is skipped with a warning.
+#[test]
+fn an_overlap_on_the_last_allowed_track_is_skipped() {
+    let clip = |id: &str| {
+        format!(
+            r#"<clipitem id="{id}"><name>A</name><start>0</start><end>25</end><in>0</in><out>25</out><file id="f"><name>a.mov</name><pathurl>file:///tmp/a.mov</pathurl><media><video/></media></file></clipitem>"#
+        )
+    };
+    let xml = format!(
+        r#"<?xml version="1.0"?><xmeml version="4"><sequence id="s"><name>S</name><rate><timebase>25</timebase><ntsc>FALSE</ntsc></rate>
+<media><video>{}<track>{}{}</track></video></media></sequence></xmeml>"#,
+        "<track/>".repeat(LIMIT - 1),
+        clip("c1"),
+        clip("c2")
+    );
+    let (imp, rep) = import(xml.as_bytes(), Format::Fcp7Xml, None).expect("import succeeds");
+    let q = imp.project.sequence(imp.sequences[0]).unwrap();
+    assert_eq!(q.tracks(TrackKind::Video).len(), LIMIT);
+    assert_eq!(q.tracks(TrackKind::Video)[LIMIT - 1].items.len(), 1, "the overlapping clip was not kept");
+    assert!(rep.mentions("overlaps clips on all 999 tracks"), "{rep}");
+}

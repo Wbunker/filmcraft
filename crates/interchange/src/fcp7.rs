@@ -74,10 +74,6 @@ fn generator_from(name: &str, id: &str, report: &mut Report) -> Generator {
     }
 }
 
-/// Most tracks of one kind a sequence has (the engine's `sequence_tools::MAX_TRACKS`); a file listing
-/// more `<track>` elements is cut there so the import is a sequence the engine could have built.
-const MAX_TRACKS: usize = 999;
-
 fn read_rate(n: Node) -> Option<FrameRate> {
     let r = child(n, "rate")?;
     let tb = child_i64(r, "timebase")?;
@@ -347,8 +343,8 @@ impl<'a, 'i> Imp<'a, 'i, '_> {
         for (kind, tag) in [(TrackKind::Video, "video"), (TrackKind::Audio, "audio")] {
             let Some(m) = media.and_then(|m| child(m, tag)) else { continue };
             for (ti, tn) in children(m, "track").enumerate() {
-                if ti >= MAX_TRACKS {
-                    self.report.warn(format!("a sequence has more than {MAX_TRACKS} {tag} tracks; the rest were skipped"));
+                if ti >= crate::common::MAX_TRACKS {
+                    self.report.warn(format!("a sequence has more than {} {tag} tracks; the rest were skipped", crate::common::MAX_TRACKS));
                     break;
                 }
                 self.b.ensure_tracks(&mut seq, kind, ti + 1);
@@ -386,7 +382,10 @@ impl<'a, 'i> Imp<'a, 'i, '_> {
                         let t = &mut seq.tracks_mut(kind)[ti];
                         if t.items.iter().any(|o| o.start < ti_item.end() && ti_item.start < o.end()) {
                             self.report.warn("overlapping clip items on one track; the later one was moved to a new track");
-                            self.b.place(seq, kind, ti + 1, ti_item);
+                            if self.b.place(seq, kind, ti + 1, ti_item).is_none() {
+                                self.report
+                                    .warn(format!("a clip item overlaps clips on all {} tracks a sequence can have; skipped", crate::common::MAX_TRACKS));
+                            }
                         } else {
                             t.items.push(ti_item);
                         }
